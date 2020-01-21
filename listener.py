@@ -2,6 +2,8 @@ from __future__ import print_function
 import datetime
 import pickle
 import os.path
+import time
+import praw
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -15,10 +17,11 @@ class Listener():
 
     # This is straight from the google calendar api tutorial
     # Starts a service
-    def __init__(self, phrase, sub, tz):
+    def __init__(self, phrase, sub, tz, interval):
         self.phrase = phrase
         self.sub = sub
         self.tz = tz
+        self.interval = interval
         creds = None
 
         # The file token.pickle stores the user's access and refresh tokens, and is
@@ -28,6 +31,8 @@ class Listener():
             with open('token.pickle', 'rb') as token:
                 creds = pickle.load(token)
         # If there are no (valid) credentials available, let the user log in.
+        #print(creds)
+        #print(creds.valid)
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
@@ -41,8 +46,8 @@ class Listener():
 
         self.service = build('calendar', 'v3', credentials=creds)
 
-    # Send the alert to google calendar
-    def alert(self):
+    # Send an alert to google calendar
+    def calendar_alert(self):
         start = list(str(datetime.datetime.now() + datetime.timedelta(0, 60, 0)))
         start[10] = 'T'
         start = start[:19]
@@ -77,16 +82,41 @@ class Listener():
         print('Event created: %s' % (event.get('htmlLink')))
 
     # Start the listener itself
-    #def start(self):
-        # Loop here, looking for keyword in reddit post
+    def listen(self):
+        reddit = praw.Reddit(client_id='',
+                             client_secret='',
+                             user_agent='')
 
+        print(reddit.read_only)
 
+        most_recent = ""
+        while 1:
+            print(str(datetime.datetime.now()))
+
+            recent_set = False
+
+            for submission in reddit.subreddit(self.sub).new(limit=10):
+
+                if submission.title.lower() == most_recent:
+                    break
+
+                if self.phrase.lower() in submission.title.lower():
+                    print("FOUND : ", submission.title)
+                    self.calendar_alert()
+                    break
+
+                if not recent_set:
+                    most_recent = submission.title.lower()
+                    recent_set = True
+
+            time.sleep(self.interval)
 
 
 def main():
 
-    l = Listener("hmm", "FrugalMaleFashion", "America/Chicago")
-    l.alert()
+    l = Listener("Banana Republic", "FrugalMaleFashion", "America/Chicago", 10)
+    l.listen()
+
 
 if __name__ == '__main__':
     main()
